@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Lead Tool — Prototype</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --panel:#ffffff; --panel2:#f0f3f8; --line:#e3e8f0;
+    --text:#1d2733; --muted:#64748b; --accent:#2b6fe0; --accent-d:#1f57b5;
+    --green:#15a06a; --green-bg:#e4f6ee; --red:#dc4a4a; --red-bg:#fce8e8;
+    --amber:#c98410; --amber-bg:#fbf0db; --chip:#eef2f8;
+    --shadow:0 1px 2px rgba(16,30,54,.06),0 2px 8px rgba(16,30,54,.04);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:14px 24px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;box-shadow:var(--shadow)}
+  header h1{font-size:16px;margin:0;font-weight:680;letter-spacing:.2px}
+  header .who{color:var(--muted);font-size:12.5px;margin-top:2px}
+  nav{display:flex;gap:2px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+  nav button{background:none;border:none;color:var(--muted);padding:13px 16px;cursor:pointer;font-size:13.5px;
+    border-bottom:2.5px solid transparent;font-weight:560;white-space:nowrap}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  nav button:hover{color:var(--text)}
+  main{padding:24px;max-width:1180px;margin:0 auto}
+  .view{display:none}.view.active{display:block}
+  h2{font-size:15px;margin:0 0 14px;font-weight:640}
+  .muted{color:var(--muted)}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 17px;box-shadow:var(--shadow)}
+  .stat .n{font-size:27px;font-weight:720;letter-spacing:-.5px}
+  .stat .l{color:var(--muted);font-size:12px;margin-top:2px}
+  .stat.green .n{color:var(--green)} .stat.amber .n{color:var(--amber)}
+  .stat.blue .n{color:var(--accent)} .stat.red .n{color:var(--red)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow)}
+  .quotebar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  input,select,textarea{font-family:inherit}
+  .quotebar input{width:72px;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:8px 10px;font-size:14px}
+  button.btn{background:var(--accent);border:none;color:#fff;padding:9px 15px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:570}
+  button.btn:hover{background:var(--accent-d)}
+  button.btn.ghost{background:var(--chip);color:var(--text)}
+  button.btn.ghost:hover{background:#e2e8f2}
+  a.viewad{display:inline-block;background:var(--accent);color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none}
+  a.viewad:hover{background:var(--accent-d)}
+  .lead{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:17px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .lead .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .lead h3{margin:0;font-size:15px;font-weight:640}
+  .lead .co{color:var(--muted);font-size:13px;margin-top:2px}
+  .lead h3 a, .card a, .rec .t a{color:var(--accent);text-decoration:none}
+  .lead h3 a:hover, .rec .t a:hover{text-decoration:underline}
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:20px;padding:3px 11px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .chip.score{color:var(--accent);border-color:#cfe0fb;background:#eef5ff}
+  .chip.auto{color:var(--green);background:var(--green-bg);border-color:#bfe6d3}
+  .chip.unknown{color:var(--amber);background:var(--amber-bg);border-color:#eddcb6}
+  .chip.dup{color:var(--red);background:var(--red-bg);border-color:#f3cccc;font-weight:600}
+  .score-badge{font-size:21px;font-weight:730;color:var(--accent);white-space:nowrap}
+  .lead .preview{color:var(--muted);font-size:12.5px;margin-top:11px;padding:9px 11px;background:var(--panel2);border-radius:8px;border:1px solid var(--line)}
+  .lead .preview b{color:var(--text);font-weight:600}
+  .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center}
+  .approve{background:var(--green);color:#fff}
+  .reject{background:var(--red-bg);color:var(--red);border:1px solid #f1c9c9}
+  .approve,.reject{border:none;padding:9px 16px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
+  .reasons{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .reasons.show{display:block}
+  .reasons .rwrap{display:flex;gap:6px;flex-wrap:wrap}
+  .reasons .rhint{font-size:11.5px;color:var(--muted);margin-bottom:7px}
+  .reason.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .reason.sel:hover{color:#fff;background:var(--accent-d)}
+  .rcustom{margin-top:9px;width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-size:12.5px;display:block}
+  .reasons .rconfirm{margin-top:11px}
+  .reason{background:var(--chip);border:1px solid var(--line);color:var(--muted);border-radius:20px;padding:5px 11px;font-size:12px;cursor:pointer}
+  .reason:hover{border-color:var(--red);color:var(--red);background:var(--red-bg)}
+  .empty{text-align:center;color:var(--muted);padding:48px 20px}
+  .board{display:grid;grid-template-columns:repeat(6,minmax(170px,1fr));gap:12px;overflow-x:auto}
+  .col{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:120px}
+  .col h4{margin:2px 4px 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+    display:flex;justify-content:space-between;align-items:center}
+  .col h4 .cnt{background:#fff;border:1px solid var(--line);border-radius:10px;padding:0 7px;font-size:11px;color:var(--text)}
+  .col.archived{background:#f3f4f6}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .card h5{margin:0;font-size:13px;font-weight:620;line-height:1.35}
+  .card .co{color:var(--muted);font-size:11.5px;margin-top:3px}
+  .card select{margin-top:9px;width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:6px;font-size:11.5px}
+  .card .src{font-size:10.5px;color:var(--muted);margin-top:6px}
+  .card a{font-size:11px}
+  .note{background:#eef5ff;border:1px solid #cfe0fb;border-radius:9px;padding:11px 13px;color:#27486f;font-size:12.5px;margin-top:14px}
+  .save-row{display:flex;gap:10px;align-items:center;margin-top:18px}
+  .saved{font-size:12.5px;display:none}
+  .saved.show{display:inline}
+  .addform{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .addform .full{grid-column:1/3}
+  .addform input,.addform select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13.5px}
+  .addform label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;font-weight:540}
+  .rec{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:var(--panel2)}
+  .rec .t{font-size:13px;font-weight:580}
+  .rec .s{font-size:11.5px;color:var(--muted)}
+  .qcard{border:1px solid var(--line);border-radius:11px;padding:16px;margin-bottom:14px;background:var(--panel)}
+  .qcard .qhead{font-weight:600;font-size:13.5px;margin-bottom:9px}
+  .qcard .qnum{color:var(--accent);font-weight:700;margin-right:6px}
+  .qcard textarea{width:100%;min-height:60px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px 11px;font-size:13.5px;resize:vertical}
+  .qcard input[type=file]{font-size:13px}
+  details.derived{margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+  details.derived summary{cursor:pointer;font-size:12.5px;color:var(--accent);font-weight:560;list-style:none}
+  details.derived summary::-webkit-details-marker{display:none}
+  details.derived .dlabel{font-size:11.5px;color:var(--muted);margin:9px 0 4px}
+  details.derived input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-size:13px}
+  .prio{display:flex;align-items:center;gap:12px;margin-top:13px}
+  .prio input[type=range]{flex:1;accent-color:var(--accent)}
+  .prio .plabel{font-size:11.5px;color:var(--muted);min-width:118px}
+  .prio .pval{font-weight:650;color:var(--accent);min-width:104px;font-size:12.5px;text-align:right}
+  .costbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:13px 16px;margin-bottom:16px;font-size:13px}
+  .srow{display:flex;align-items:center;gap:14px;padding:14px 2px;border-bottom:1px solid var(--line)}
+  .srow:last-child{border-bottom:none}
+  .srow .info{flex:1}
+  .srow .nm{font-weight:600;font-size:13.5px}
+  .srow .ds{color:var(--muted);font-size:12px;margin-top:2px}
+  .srow .cost{font-weight:650;font-size:13px;min-width:74px;text-align:right}
+  .tier{font-size:10px;padding:2px 8px;border-radius:20px;margin-left:8px;vertical-align:middle;font-weight:600}
+  .tier.free{background:var(--green-bg);color:var(--green)}
+  .tier.paid{background:var(--amber-bg);color:var(--amber)}
+  .switch{position:relative;display:inline-block;width:42px;height:24px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:24px;transition:.2s}
+  .slider:before{content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+  .switch input:checked+.slider{background:var(--accent)}
+  .switch input:checked+.slider:before{transform:translateX(18px)}
+  .connform{margin-top:10px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px}
+  .connform label{display:block;font-size:11.5px;color:var(--muted);margin:6px 0 3px;font-weight:540}
+  .connform input{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-size:13px}
+  #gate{position:fixed;inset:0;background:var(--bg);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+  #gate .gatebox{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:28px;max-width:380px;width:100%;text-align:center}
+  #gate h2{font-size:17px;margin:0 0 8px;border:none}
+  #gate input{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:11px;font-size:15px;margin:14px 0;text-align:center}
+  #gate .gerr{color:var(--red);font-size:12.5px;min-height:16px}
+  #gate .gsmall{font-size:11px;color:var(--muted);margin-top:16px}
+  footer{color:var(--muted);font-size:11.5px;text-align:center;padding:24px}
+  @media(max-width:820px){.addform{grid-template-columns:1fr}.addform .full{grid-column:1}.board{grid-template-columns:repeat(3,minmax(150px,1fr))}}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="gatebox">
+    <h2 id="gateTitle">Enter passcode</h2>
+    <p id="gateHint" class="muted" style="font-size:12.5px"></p>
+    <input type="password" id="gateInput" onkeydown="if(event.key==='Enter')submitGate()" placeholder="passcode">
+    <button class="btn" style="width:100%" onclick="submitGate()">Unlock</button>
+    <div class="gerr" id="gateErr"></div>
+    <div class="gsmall">Your passcode is enforced on the server (stored only as a hash) and protects all your data.</div>
+  </div>
+</div>
+<header>
+  <div>
+    <h1>Job Lead Tool</h1>
+    <div class="who" id="whoLine"></div>
+  </div>
+</header>
+<nav>
+  <button class="active" data-v="dash">Dashboard</button>
+  <button data-v="daily">Leads</button>
+  <button data-v="pipeline">Pipeline</button>
+  <button data-v="add">Add a Job</button>
+  <button data-v="sources">Data Sources</button>
+  <button data-v="profile">Candidate Profile</button>
+</nav>
+<main>
+  <section class="view active" id="dash">
+    <h2>Overview</h2>
+    <div class="stats" id="statCards"></div>
+    <div class="panel">
+      <h2>Search summary</h2>
+      <div class="muted" id="searchSummary" style="line-height:1.6"></div>
+    </div>
+    <div class="panel">
+      <h2>More openings at organizations you've engaged</h2>
+      <div id="recos" class="muted"></div>
+    </div>
+    <div class="panel">
+      <h2>Feedback signal</h2>
+      <div class="muted" id="feedbackSummary"></div>
+    </div>
+  </section>
+
+  <section class="view" id="daily">
+    <h2>Leads to review</h2>
+    <p class="muted" style="margin-top:-6px">The preview is a quick scan to weed out obvious no's. If a role looks interesting, open the <b>full job ad</b> before approving. Only leads from your <b>enabled data sources</b> appear here.</p>
+    <div class="quotebar">
+      <span class="muted">Show me</span>
+      <input type="number" id="quota" min="1" max="50" value="20">
+      <span class="muted">leads</span>
+      <button class="btn" onclick="buildBatch()">Build batch</button>
+      <span class="muted" id="batchInfo"></span>
+    </div>
+    <div id="queue"></div>
+  </section>
+
+  <section class="view" id="pipeline">
+    <h2>Application pipeline</h2>
+    <p class="muted" style="margin-top:-6px">Only leads you've <b>approved</b> in the Leads batch or <b>added</b> here appear in the pipeline. "In Progress" is where you resume unfinished applications. Rejected/closed leads live in <b>Archived</b>.</p>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section class="view" id="add">
+    <h2>Add a job</h2>
+    <p class="muted" style="margin-top:-6px">Paste a link to any job posting. We'll read the details if the site allows it — if not, we'll ask you to paste the description. Then pick a stage, and we'll fold the organization (and similar ones) into your search.</p>
+
+    <div class="panel">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:540">Job posting link</label>
+      <div class="quotebar" style="margin-bottom:0">
+        <input id="j_url" style="flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13.5px" placeholder="https://boards.greenhouse.io/org/jobs/123  or  https://www.indeed.com/viewjob?jk=...">
+        <button class="btn" onclick="readJob()">Read job</button>
+      </div>
+      <div id="readStatus" class="muted" style="margin-top:12px;font-size:13px"></div>
+    </div>
+
+    <div class="panel" id="pastePanel" style="display:none">
+      <h2>Paste the full job description</h2>
+      <p class="muted" style="margin-top:-6px;font-size:13px">This site blocks automated reading, so paste the posting text and we'll pull out the details.</p>
+      <textarea id="j_desc" style="width:100%;min-height:140px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:11px;font-size:13px;resize:vertical" placeholder="Paste the entire job description here, including organization name, title, location, and pay if listed..."></textarea>
+      <div class="save-row"><button class="btn" onclick="extractFromDesc()">Extract details</button></div>
+    </div>
+
+    <div class="panel" id="detailsPanel" style="display:none">
+      <h2>Confirm the details</h2>
+      <div class="addform">
+        <div><label>Organization *</label><input id="f_company" placeholder="e.g. United Way"></div>
+        <div><label>Job title *</label><input id="f_title" placeholder="e.g. Director of Communications"></div>
+        <div><label>Location</label><input id="f_location" placeholder="e.g. Remote (US)"></div>
+        <div><label>Salary (optional)</label><input id="f_salary" placeholder="e.g. \$140k–\$175k"></div>
+        <div class="full"><label>What stage should this job be added to?</label>
+          <select id="f_status">
+            <option value="in_progress">In Progress (saved, not yet applied)</option>
+            <option value="app_complete">App Complete (already applied)</option>
+            <option value="round1">Round 1</option>
+            <option value="round2">Round 2</option>
+            <option value="round3">Round 3</option>
+          </select>
+        </div>
+        <div class="full save-row">
+          <button class="btn" onclick="addJobFull()">Add job</button>
+          <span class="saved" id="addMsg"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="expandPanel" style="display:none">
+      <h2>Expand the search around this organization</h2>
+      <div id="expandBody" class="muted"></div>
+    </div>
+  </section>
+
+  <section class="view" id="sources">
+    <h2>Data sources</h2>
+    <p class="muted" style="margin-top:-6px">Turn each job-data feed on or off. Free feeds cost nothing; paid feeds add a monthly subscription and broaden coverage. Disabling a feed removes its leads from your Daily Leads queue. Most feeds need an API key — even some free ones — so connect them below before enabling.</p>
+    <div class="panel">
+      <div class="costbar" id="sourceSummary"></div>
+      <div id="sourceList"></div>
+      <div class="note">Adzuna and USAJOBS issue a <b>free</b> API key; SerpApi and the Indeed vendor give you a <b>paid</b> key after you subscribe. Greenhouse and Lever read public boards and need no key. Indeed has no public search API and isn't in Google Jobs, so its coverage comes through a licensed data vendor that runs the scraping — a ToS gray area, enabled only if needed. In production, keys are stored encrypted on the server, never in the browser like this prototype.</div>
+    </div>
+  </section>
+
+  <section class="view" id="profile">
+    <h2>Candidate profile <span class="muted" style="font-weight:400">— narrative intake</span></h2>
+    <p class="muted" style="margin-top:-6px">Answer in your own words. We turn each answer into structured criteria (open "What we understood" to see and edit it), and you set how much each one matters.</p>
+    <div class="note" style="margin-top:0;margin-bottom:16px">Importance (1–5) decides how strict each preference is. Low = we <b>widen</b> the search around it; high = we <b>hold the line</b>. That's why pay is a <b>target</b> with an importance — not a hard floor.</div>
+    <div id="profileForm"></div>
+    <div class="save-row">
+      <button class="btn" onclick="saveProfile()">Save profile</button>
+      <span class="saved" id="profileMsg">Saved ✓</span>
+    </div>
+    <div class="panel" style="margin-top:22px;border-color:#f1c9c9">
+      <h2 style="color:var(--red)">Reset for a new candidate</h2>
+      <p class="muted" style="margin-top:-6px">Wipes the profile, resume, all leads, the pipeline, and any connected data-source keys so the next person starts fresh. You'll set a new passcode. This cannot be undone.</p>
+      <button class="btn" style="background:var(--red)" onclick="resetData()">Reset everything</button>
+    </div>
+  </section>
+</main>
+<footer>Connected to your live backend. API keys are stored encrypted on the server; your resume text is sent to your configured LLM provider only for parsing.</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

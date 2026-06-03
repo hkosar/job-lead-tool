@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+httpx
+anthropic
+python-multipart
+pypdf
+python-dotenv
+bcrypt
+cryptography
+psycopg2-binary
