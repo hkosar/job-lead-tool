@@ -386,6 +386,12 @@ def reset_all():
     return {"ok": True}
 
 
+# ---------- health check (used by the hosting platform; no auth) ----------
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
 # ---------- serve the frontend ----------
 FRONTEND = os.path.join(os.path.dirname(__file__), "..", "frontend")
 

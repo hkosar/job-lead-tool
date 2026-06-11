@@ -82,9 +82,10 @@ or just tell Claude Code to commit for you.
 ---
 
 ## Step 6 — Put it online (when it works locally)
-The easiest beginner hosts are **Render** (https://render.com) or **Railway** (https://railway.app).
-Ask Claude Code: *"Help me deploy this FastAPI app to Render, including setting my environment
-variables and switching the database to Postgres."* It will walk you through it.
+Follow **`DEPLOY.md`** — a click-by-click guide to hosting the app on **Render**
+(https://render.com) using the `render.yaml` file already in this repo. It covers the
+two values you'll paste in (`FERNET_KEY`, optional `ANTHROPIC_API_KEY`) and what the
+free tier does and doesn't include.
 
 ---
 
