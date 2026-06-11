@@ -174,6 +174,60 @@ function renderDash(){
   }
 }
 
+/* ---------- competitor portal check (Phase 3) ---------- */
+function renderCompetitors(){
+  const el=document.getElementById("competitors");
+  if(!state.competitors){
+    el.innerHTML=`We can suggest organizations similar to your seed orgs and check whether each runs a
+      readable hiring portal (Greenhouse/Lever) with roles matching your profile.
+      <div class="save-row" style="margin-top:10px"><button class="btn" onclick="scanCompetitors()">Find similar organizations</button>
+      <span class="saved" id="compMsg"></span></div>`;
+    return;
+  }
+  const rows=state.competitors.map(r=>{
+    const chip = r.portal==="yes"
+      ? `<span class="chip auto">portal: yes · ${esc(r.ats)}</span>`
+      : `<span class="chip unknown">portal: unknown</span>`;
+    const counts = r.portal==="yes"
+      ? `${r.matching} matching of ${r.openings} open role${r.openings!==1?"s":""}`
+      : "no public Greenhouse/Lever board found — they may hire elsewhere";
+    const pull = (r.portal==="yes" && r.matching>0)
+      ? `<button class="btn" onclick="pullCompetitor('${esc(r.company).replace(/'/g,"&#39;")}')">Pull openings</button>` : "";
+    return `<div class="rec"><div><div class="t">${esc(r.company)}</div>
+      <div class="s">${chip} · ${counts}</div></div>${pull}</div>`;
+  }).join("");
+  el.innerHTML=(rows||"No new suggestions this time.")+
+    `<div class="save-row" style="margin-top:10px"><button class="btn ghost" onclick="scanCompetitors()">Scan again</button>
+     <span class="saved" id="compMsg"></span></div>`;
+}
+async function scanCompetitors(){
+  const el=document.getElementById("competitors");
+  el.innerHTML="Asking the LLM for similar organizations, then checking each one's public hiring boards… (can take ~30 seconds)";
+  try{
+    const r=await api("/api/competitors/scan",{method:"POST"});
+    if(!r.ok){
+      state.competitors=null;
+      el.innerHTML=`<span style="color:var(--amber)">${esc(r.detail)}</span>
+        <div class="save-row" style="margin-top:10px"><button class="btn ghost" onclick="scanCompetitors()">Try again</button></div>`;
+      return;
+    }
+    state.competitors=r.competitors;
+    renderCompetitors();
+  }catch(e){
+    el.innerHTML='<span style="color:var(--red)">Scan failed: '+esc(e.message)+'</span>'+
+      '<div class="save-row" style="margin-top:10px"><button class="btn ghost" onclick="scanCompetitors()">Try again</button></div>';
+  }
+}
+async function pullCompetitor(co){
+  const m=document.getElementById("compMsg");
+  flash(m,"Pulling openings…","var(--muted)");
+  try{
+    const r=await api("/api/expand",{method:"POST",json:{company:co}});
+    await loadLeads(); renderQueue(); renderDash();
+    flash(m, r.added?`Added ${r.added} lead${r.added!==1?"s":""} from ${co} ✓ — see the Leads tab`:"No new matching openings (they may already be in your leads).", r.added?"var(--green)":"var(--amber)");
+  }catch(e){ flash(m,"Could not pull: "+e.message,"var(--red)"); }
+}
+
 /* ---------- leads / batch ---------- */
 async function buildBatch(){
   const info=document.getElementById("batchInfo");
@@ -554,7 +608,7 @@ function switchTo(view){
   document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x.dataset.v===view));
   document.querySelectorAll(".view").forEach(x=>x.classList.toggle("active",x.id===view));
 }
-function renderAll(){ renderProfile(); renderSources(); renderDash(); renderQueue(); renderBoard(); }
+function renderAll(){ renderProfile(); renderSources(); renderDash(); renderQueue(); renderBoard(); renderCompetitors(); }
 
 /* ---------- passcode gate (server-enforced) ---------- */
 let gateMode="enter";

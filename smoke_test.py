@@ -3,6 +3,7 @@ Exercises auth gate, profile, sources (connect+encrypt), scoring, leads, reset.
 Safe to delete; it uses a throwaway test DB."""
 import os
 os.environ["DATABASE_URL"] = "sqlite:///./_smoke.db"
+os.environ.pop("ANTHROPIC_API_KEY", None)   # test the no-LLM fallback paths
 if os.path.exists("_smoke.db"):
     os.remove("_smoke.db")
 
@@ -101,6 +102,11 @@ assert b2["leads"][0]["id"] not in ids1, "never-shown lead should come first"
 assert b2["fresh"] == 1
 assert c.get("/api/leads", headers=H).json()["current_batch"] == 2
 print("batch: anti-repeat OK (batch1", sorted(ids1), "-> batch2", sorted(ids2), ")")
+
+# competitor scan: without an LLM key it must explain itself, not error
+comp = c.post("/api/competitors/scan", headers=H).json()
+assert comp["ok"] is False and comp.get("needs_key"), comp
+print("competitors: graceful needs-key response OK")
 
 assert c.post("/api/reset", headers=H).json()["ok"]
 assert c.get("/api/auth/status").json()["passcode_set"] is False

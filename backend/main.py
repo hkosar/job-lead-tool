@@ -421,6 +421,61 @@ def expand_search(company: str = Body(..., embed=True)):
     return {"added": added}
 
 
+# ---------- Phase 3: competitor portal check ----------
+@app.post("/api/competitors/scan")
+def scan_competitors():
+    """Discover organizations similar to the candidate's seed orgs (LLM-suggested),
+    then probe each one's public Greenhouse/Lever board. portal='yes' comes with a
+    count of openings matching the target role; orgs without a queryable board are
+    honestly 'unknown' (spec section 2)."""
+    from .sources.base import org_names, all_role_terms
+    with Session(engine) as s:
+        profile = jload(get_state(s).profile_json, {})
+    seeds = org_names(profile)
+    if not seeds:
+        return {"ok": False, "needs_seeds": True,
+                "detail": "Add seed organizations in your Candidate Profile first "
+                          "(the 'organizations you'd love to work for' question)."}
+    industries = (profile.get("industries", {}) or {}).get("derived", "") or ""
+    names = llm.suggest_competitors(seeds, industries)
+    if not names:
+        return {"ok": False, "needs_key": True,
+                "detail": "Competitor discovery uses the LLM to suggest similar "
+                          "organizations — set ANTHROPIC_API_KEY to enable it."}
+    terms = all_role_terms(profile)
+    seen = {_norm(x) for x in seeds}
+    rows = []
+    for name in names[:8]:
+        if not name or _norm(name) in seen:
+            continue
+        seen.add(_norm(name))
+        rows.append(_probe_org(name, terms))
+    return {"ok": True, "competitors": rows}
+
+
+def _probe_org(name: str, terms: list[str]) -> dict:
+    """Check one organization's public ATS boards. Greenhouse/Lever give a real
+    'yes' (queryable portal); anything else is 'unknown' — they may still hire
+    through Workday or a custom site we can't read."""
+    from .sources.base import slugs_for, get_json, matches_role, strip_html
+    for slug in slugs_for(name)[:2]:
+        g = get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
+                     params={"content": "true"})
+        if g and "jobs" in g:
+            jobs = g.get("jobs", [])
+            hits = sum(1 for j in jobs if matches_role(
+                f"{j.get('title', '')} {strip_html(j.get('content', '') or '')}", terms))
+            return {"company": name, "portal": "yes", "ats": "greenhouse",
+                    "openings": len(jobs), "matching": hits}
+        lv = get_json(f"https://api.lever.co/v0/postings/{slug}", params={"mode": "json"})
+        if isinstance(lv, list) and lv:
+            hits = sum(1 for j in lv if matches_role(
+                f"{j.get('text', '')} {j.get('descriptionPlain', '') or ''}", terms))
+            return {"company": name, "portal": "yes", "ats": "lever",
+                    "openings": len(lv), "matching": hits}
+    return {"company": name, "portal": "unknown", "ats": "", "openings": 0, "matching": 0}
+
+
 # ---------- reset ----------
 @app.post("/api/reset")
 def reset_all():

@@ -91,15 +91,25 @@ def location_query(profile: dict) -> str:
     return ""
 
 
+def slugs_for(name: str) -> list[str]:
+    """Board-slug candidates for one organization name.
+    'United Way Worldwide' -> 'unitedwayworldwide', 'united-way-worldwide'."""
+    base = re.sub(r"[^a-z0-9]", "", (name or "").lower())
+    hyphen = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    out: list[str] = []
+    for cand in (base, hyphen):
+        if cand and cand not in out:
+            out.append(cand)
+    return out
+
+
 def org_slugs(profile: dict) -> list[str]:
     """Candidate board slugs from the 'dream' (seed) organizations, for keyless ATS
     boards. 'United Way Worldwide' -> 'unitedwayworldwide', 'united-way', ..."""
     out: list[str] = []
     for org in org_names(profile):
-        base = re.sub(r"[^a-z0-9]", "", org.lower())
-        hyphen = re.sub(r"[^a-z0-9]+", "-", org.lower()).strip("-")
-        for cand in (base, hyphen):
-            if cand and cand not in out:
+        for cand in slugs_for(org):
+            if cand not in out:
                 out.append(cand)
     return out
 

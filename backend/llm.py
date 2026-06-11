@@ -27,6 +27,13 @@ JOB_SYSTEM = (
     "description = a 1-2 sentence summary. Do not invent facts."
 )
 
+COMPETITOR_SYSTEM = (
+    "You suggest real organizations similar to a job-seeker's target organizations — "
+    "same sector, mission space, or talent market. Return ONLY a JSON array of "
+    "organization names (strings), most similar first. Do not repeat the "
+    "organizations you were given. No commentary."
+)
+
 
 def _client():
     key = os.getenv("ANTHROPIC_API_KEY")
@@ -66,6 +73,40 @@ def parse_to_profile(text: str) -> dict:
     except Exception as e:
         print("LLM parse failed:", e)
         return {}
+
+
+def suggest_competitors(seeds: list[str], industries: str = "", n: int = 8) -> list[str]:
+    """Organizations similar to the seed orgs, drafted by the LLM (Phase 3
+    competitor discovery). Returns [] when no API key is configured."""
+    client = _client()
+    if not client or not seeds:
+        return []
+    prompt = "Target organizations: " + ", ".join(seeds[:10])
+    if industries:
+        prompt += "\nPreferred industries: " + industries
+    prompt += f"\nSuggest {n} similar organizations."
+    try:
+        msg = client.messages.create(
+            model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+            max_tokens=400,
+            system=COMPETITOR_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return _list_from(msg.content[0].text)[:n]
+    except Exception as e:
+        print("LLM competitor suggest failed:", e)
+        return []
+
+
+def _list_from(raw: str) -> list[str]:
+    start, end = raw.find("["), raw.rfind("]")
+    if start < 0 or end < 0:
+        return []
+    try:
+        items = json.loads(raw[start:end + 1])
+        return [str(x).strip() for x in items if str(x).strip()]
+    except Exception:
+        return []
 
 
 def parse_job_posting(text: str) -> dict:
