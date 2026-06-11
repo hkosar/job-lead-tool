@@ -7,13 +7,14 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.10"
       - key: SESSION_SECRET          # signs login sessions; random is fine
         generateValue: true
-      - key: FERNET_KEY              # encrypts saved API keys; paste your local value (see README)
-        sync: false
+      - key: FERNET_KEY              # encrypts saved API keys; any random secret works
+        generateValue: true
       - key: ANTHROPIC_API_KEY       # optional: enables resume auto-drafting
         sync: false
       - key: DATABASE_URL            # auto-filled from the database below

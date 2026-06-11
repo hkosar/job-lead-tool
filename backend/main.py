@@ -174,6 +174,21 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
+def _source_enabled(cfg: dict, key: str) -> bool:
+    """Leads from registered sources count only while that source is on+connected;
+    manual / internal leads are always eligible."""
+    if key not in REGISTRY:
+        return True
+    a = REGISTRY[key]
+    c = cfg.get(key, {})
+    return bool(c.get("on", a.keyless) and a.is_connected(crypto.decrypt_creds(c.get("creds"))))
+
+
+def _current_batch(s: Session) -> int:
+    top = s.exec(select(Lead.batch_id).order_by(Lead.batch_id.desc())).first()
+    return int(top or 0)
+
+
 def _reject_history(s: Session) -> dict:
     """Tally rejection reasons across archived leads -> {reason: count} for scoring."""
     tally: dict[str, int] = {}
@@ -228,13 +243,40 @@ def refresh_leads():
     return {"found": found, "added": added, "errors": errors}
 
 
+@app.post("/api/leads/batch")
+def assemble_batch(n: int = Body(20, embed=True)):
+    """Assemble the next batch of up to n unreviewed leads (spec: batch history /
+    anti-repeat). Leads never shown before come first, ranked by score; leads from
+    earlier batches repeat only when fresh ones run out (oldest-shown first). The
+    chosen leads are stamped with a batch number and presentation time."""
+    n = max(1, min(50, n or 20))
+    with Session(engine) as s:
+        cfg = jload(get_state(s).sources_json, {})
+        pool = [l for l in s.exec(select(Lead).where(Lead.status == "new")).all()
+                if _source_enabled(cfg, l.source_key)]
+        pool.sort(key=lambda l: (1 if l.date_presented else 0,
+                                 l.date_presented or "", -l.score))
+        chosen = pool[:n]
+        fresh = sum(1 for l in chosen if not l.date_presented)
+        batch = _current_batch(s) + (1 if chosen else 0)
+        stamp = now_iso()
+        for l in chosen:
+            l.batch_id = batch
+            l.date_presented = stamp
+            s.add(l)
+        s.commit()
+        return {"batch": batch, "fresh": fresh, "pool": len(pool),
+                "leads": [_lead_dict(l) for l in chosen]}
+
+
 @app.get("/api/leads")
 def get_leads(status: str | None = None):
     with Session(engine) as s:
         q = select(Lead)
         if status:
             q = q.where(Lead.status == status)
-        return {"leads": [_lead_dict(l) for l in s.exec(q).all()]}
+        return {"leads": [_lead_dict(l) for l in s.exec(q).all()],
+                "current_batch": _current_batch(s)}
 
 
 def _lead_dict(l: Lead) -> dict:
@@ -244,7 +286,8 @@ def _lead_dict(l: Lead) -> dict:
         "source": l.source or l.source_key, "source_key": l.source_key, "ats": l.ats,
         "portal": l.portal, "score": l.score, "status": l.status,
         "reasons": jload(l.reasons_json, []), "addedManually": l.added_manually,
-        "dateFound": l.date_found,
+        "dateFound": l.date_found, "datePresented": l.date_presented,
+        "batchId": l.batch_id,
     }
 
 
@@ -351,6 +394,10 @@ def expand_search(company: str = Body(..., embed=True)):
         # build a one-org pseudo-profile so the keyless adapters target this company
         slug_seed = {"dream": {"derived": company}}
         probe = dict(profile); probe["dream"] = slug_seed["dream"]
+        # the candidate asked for these explicitly, so put them straight into the
+        # current batch (if one exists) instead of waiting for the next build
+        cur_batch = _current_batch(s)
+        stamp = now_iso() if cur_batch else ""
         added = 0
         for adapter in (GreenhouseAdapter(), LeverAdapter()):
             try:
@@ -365,12 +412,68 @@ def expand_search(company: str = Body(..., embed=True)):
                                salary=d["salary"], url=d["url"], description=d["description"],
                                source_key=d["source_key"], source=d["source"], ats=d["ats"],
                                portal=d["portal"], score=d["score"], status="new",
-                               date_found=now_iso()))
+                               date_found=now_iso(), batch_id=cur_batch,
+                               date_presented=stamp))
                     added += 1
             except Exception as e:
                 print("expand error:", e)
         s.commit()
     return {"added": added}
+
+
+# ---------- Phase 3: competitor portal check ----------
+@app.post("/api/competitors/scan")
+def scan_competitors():
+    """Discover organizations similar to the candidate's seed orgs (LLM-suggested),
+    then probe each one's public Greenhouse/Lever board. portal='yes' comes with a
+    count of openings matching the target role; orgs without a queryable board are
+    honestly 'unknown' (spec section 2)."""
+    from .sources.base import org_names, all_role_terms
+    with Session(engine) as s:
+        profile = jload(get_state(s).profile_json, {})
+    seeds = org_names(profile)
+    if not seeds:
+        return {"ok": False, "needs_seeds": True,
+                "detail": "Add seed organizations in your Candidate Profile first "
+                          "(the 'organizations you'd love to work for' question)."}
+    industries = (profile.get("industries", {}) or {}).get("derived", "") or ""
+    names = llm.suggest_competitors(seeds, industries)
+    if not names:
+        return {"ok": False, "needs_key": True,
+                "detail": "Competitor discovery uses the LLM to suggest similar "
+                          "organizations — set ANTHROPIC_API_KEY to enable it."}
+    terms = all_role_terms(profile)
+    seen = {_norm(x) for x in seeds}
+    rows = []
+    for name in names[:8]:
+        if not name or _norm(name) in seen:
+            continue
+        seen.add(_norm(name))
+        rows.append(_probe_org(name, terms))
+    return {"ok": True, "competitors": rows}
+
+
+def _probe_org(name: str, terms: list[str]) -> dict:
+    """Check one organization's public ATS boards. Greenhouse/Lever give a real
+    'yes' (queryable portal); anything else is 'unknown' — they may still hire
+    through Workday or a custom site we can't read."""
+    from .sources.base import slugs_for, get_json, matches_role, strip_html
+    for slug in slugs_for(name)[:2]:
+        g = get_json(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
+                     params={"content": "true"})
+        if g and "jobs" in g:
+            jobs = g.get("jobs", [])
+            hits = sum(1 for j in jobs if matches_role(
+                f"{j.get('title', '')} {strip_html(j.get('content', '') or '')}", terms))
+            return {"company": name, "portal": "yes", "ats": "greenhouse",
+                    "openings": len(jobs), "matching": hits}
+        lv = get_json(f"https://api.lever.co/v0/postings/{slug}", params={"mode": "json"})
+        if isinstance(lv, list) and lv:
+            hits = sum(1 for j in lv if matches_role(
+                f"{j.get('text', '')} {j.get('descriptionPlain', '') or ''}", terms))
+            return {"company": name, "portal": "yes", "ats": "lever",
+                    "openings": len(lv), "matching": hits}
+    return {"company": name, "portal": "unknown", "ats": "", "openings": 0, "matching": 0}
 
 
 # ---------- reset ----------
@@ -383,6 +486,12 @@ def reset_all():
         st = get_state(s)
         st.passcode_hash = ""; st.profile_json = "{}"; st.intro = ""; st.sources_json = "{}"
         s.add(st); s.commit()
+    return {"ok": True}
+
+
+# ---------- health check (used by the hosting platform; no auth) ----------
+@app.get("/healthz")
+def healthz():
     return {"ok": True}
 
 

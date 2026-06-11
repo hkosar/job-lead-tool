@@ -1,8 +1,10 @@
 """Symmetric encryption for API keys stored at rest (spec section 9).
 
-Uses Fernet (AES-128-CBC + HMAC) with a key from FERNET_KEY in .env. If no key
-is set we fall back to a no-op so the app still runs in development — but a real
-key is generated into .env by setup, so encryption is on by default.
+Uses Fernet (AES-128-CBC + HMAC) keyed from the FERNET_KEY environment variable.
+FERNET_KEY may be a proper Fernet key OR any random secret string (hosting
+platforms can auto-generate one); non-Fernet values are hashed into a valid key.
+If no key is set at all we fall back to a no-op so the app still runs in
+development.
 """
 from __future__ import annotations
 import os, json, base64
@@ -14,7 +16,15 @@ def _fernet():
         return None
     try:
         from cryptography.fernet import Fernet
-        return Fernet(key.encode())
+        try:
+            return Fernet(key.encode())   # value is already a valid Fernet key
+        except Exception:
+            # Any other secret string (e.g. a random value the hosting platform
+            # generated) is hashed into a valid 32-byte key, so encryption works
+            # without the operator ever hand-crafting a Fernet key.
+            import hashlib
+            derived = base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest())
+            return Fernet(derived)
     except Exception as e:
         print("Fernet init failed (storing creds unencrypted):", e)
         return None

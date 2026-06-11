@@ -6,6 +6,7 @@ the ranking, and track every application through a pipeline.
 
 - **`spec/job-lead-tool-spec.md`** — the full product + technical spec (read this first).
 - **`SETUP-GUIDE.md`** — step-by-step setup for a non-developer. **Start here if you've never run code before.**
+- **`DEPLOY.md`** — put the app online with Render (cloud hosting + cloud database).
 - **`CLAUDE.md`** — context for Claude Code; it reads this automatically.
 - **`first-prompts-for-claude-code.md`** — copy-paste prompts to start the build.
 - **`frontend/index.html`** — the working clickable prototype (the UX reference).

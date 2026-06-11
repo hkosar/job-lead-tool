@@ -3,6 +3,7 @@ Exercises auth gate, profile, sources (connect+encrypt), scoring, leads, reset.
 Safe to delete; it uses a throwaway test DB."""
 import os
 os.environ["DATABASE_URL"] = "sqlite:///./_smoke.db"
+os.environ.pop("ANTHROPIC_API_KEY", None)   # test the no-LLM fallback paths
 if os.path.exists("_smoke.db"):
     os.remove("_smoke.db")
 
@@ -80,6 +81,32 @@ print("extract (heuristic):", det.get("title"), "|", det.get("salary"))
 
 rr = c.post("/api/leads/refresh", headers=H).json()
 print("refresh:", {k: rr[k] for k in ("found", "added")}, "errors:", rr["errors"][:1])
+
+# batch anti-repeat: seed three unreviewed leads, then build two batches of 2.
+# Batch 1 takes the top two by score; batch 2 must lead with the never-shown one.
+from backend.models import Lead as _Lead
+with Session(engine) as s:
+    for t, sc in (("VP of Communications", 90.0), ("Director of Communications", 80.0),
+                  ("Head of Media", 70.0)):
+        s.add(_Lead(title=t, company="Org " + t.split()[-1], location="Remote",
+                    source_key="greenhouse", source="Greenhouse", ats="greenhouse",
+                    portal="yes", score=sc, status="new"))
+    s.commit()
+b1 = c.post("/api/leads/batch", json={"n": 2}, headers=H).json()
+assert b1["batch"] == 1 and len(b1["leads"]) == 2 and b1["fresh"] == 2
+ids1 = {l["id"] for l in b1["leads"]}
+b2 = c.post("/api/leads/batch", json={"n": 2}, headers=H).json()
+ids2 = {l["id"] for l in b2["leads"]}
+assert b2["batch"] == 2 and ids2 != ids1, "second batch repeated the first"
+assert b2["leads"][0]["id"] not in ids1, "never-shown lead should come first"
+assert b2["fresh"] == 1
+assert c.get("/api/leads", headers=H).json()["current_batch"] == 2
+print("batch: anti-repeat OK (batch1", sorted(ids1), "-> batch2", sorted(ids2), ")")
+
+# competitor scan: without an LLM key it must explain itself, not error
+comp = c.post("/api/competitors/scan", headers=H).json()
+assert comp["ok"] is False and comp.get("needs_key"), comp
+print("competitors: graceful needs-key response OK")
 
 assert c.post("/api/reset", headers=H).json()["ok"]
 assert c.get("/api/auth/status").json()["passcode_set"] is False
