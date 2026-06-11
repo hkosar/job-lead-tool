@@ -6,34 +6,48 @@ commit often, and never assume prior knowledge. Prefer clarity over cleverness.
 
 ## Read these first
 - `spec/job-lead-tool-spec.md` — the authoritative product + technical spec. Follow it.
-- `frontend/index.html` — the working clickable prototype. It is the UX reference: the
-  production UI should match its tabs, labels, flows, and states. (It currently uses
-  localStorage + sample data; the build wires it to the backend API.)
+- `frontend/index.html` + `frontend/app.js` — the live UI, wired to the backend API. The
+  tabs, labels, flows, and states in it are the UX reference; keep them consistent.
 
-## What's here
-- `backend/main.py` — FastAPI app with routes wired to **stub** behavior so it runs today.
-- `backend/models.py` — SQLite (SQLModel) single-candidate data model.
-- `backend/sources/` — one adapter per data source behind `base.SourceAdapter`; `__init__.REGISTRY`
-  lists them. Add a source = add a file + register it. Each adapter has a `TODO` for the real API call.
-- `backend/scoring.py` — transparent weighted scoring (no ML). Has `TODO`s for salary/seniority/affinity.
-- `backend/llm.py` — Anthropic-based parsing of resume/narrative into draft profile answers.
-- `backend/auth.py` — single-passcode gate; **must be enforced server-side** (see spec §9).
+## Current status: v1 is BUILT and WORKING (verified by `smoke_test.py`)
+The original build order (steps 1–6) is complete. What exists today:
+- `backend/main.py` — FastAPI app, all routes implemented (no stubs): server-side sessions,
+  profile, sources, lead refresh (search → score → de-dupe → persist), add-a-job
+  read/extract/expand, reset.
+- `backend/models.py` — SQLite by default, Postgres-ready (set `DATABASE_URL`). Hand-rolled
+  column migration for existing SQLite files lives in `_migrate_columns` — add new Lead/AppState
+  columns there too.
+- `backend/sources/` — six real adapters behind `base.SourceAdapter`, listed in
+  `__init__.REGISTRY`: Adzuna, Greenhouse (keyless), Lever (keyless), USAJOBS,
+  SerpApi Google Jobs (paid), Indeed via Bright Data vendor (paid).
+  Add a source = add a file + register it.
+- `backend/scoring.py` — transparent weighted scoring (keyword/location/seniority/salary/
+  affinity/industry + rejection-pattern penalties). No ML, on purpose.
+- `backend/llm.py` — Anthropic parsing of resume (PDF/DOCX/TXT) and narrative into draft
+  profile answers; job-posting extraction with a regex fallback when no key is set.
+- `backend/auth.py` — bcrypt passcode hash, signed expiring session tokens, rate-limited
+  login. Enforced by middleware on all `/api/*` except `/api/auth/*`.
+- `backend/crypto.py` — Fernet encryption for stored source credentials (needs `FERNET_KEY`).
+- `smoke_test.py` — end-to-end backend checks. Run it after backend changes:
+  `python smoke_test.py` (uses a throwaway DB). Keep it green; extend it with new endpoints.
+- `render.yaml` + `DEPLOY.md` — Render deployment (web service + free Postgres).
 
-## Build order (suggested)
-1. Make the frontend talk to the backend API (replace its localStorage with `fetch` calls to `/api/*`).
-2. Implement the Adzuna, Greenhouse, and Lever adapters (free) + `/api/leads/refresh` (search, score, de-dupe, persist).
-3. Wire LLM parsing (`/api/profile/parse`) into the resume upload + narrative box (fill blanks only, never overwrite).
-4. Real server-side auth: session token issued on passcode login; require it on `/api/*` except `/api/auth/*`; rate-limit.
-5. Encrypt source credentials before storing (`connect_source` has a TODO).
-6. Paid adapters (SerpApi Google Jobs, Indeed vendor) with the connect/credential UI.
-7. Phase 3: competitor portal-check (Yes/No for Greenhouse/Lever, Unknown otherwise).
+## What's next (remaining roadmap)
+1. Batch history / anti-repeat (spec §4 "batch history", Phase 4): record which leads were
+   shown in each batch so rebuilding doesn't repeat ignored leads.
+2. Phase 3 — competitor portal-check: discover orgs similar to the seed organizations,
+   probe their Greenhouse/Lever boards (Yes / Unknown), pull matching openings.
+3. Phase 4 polish: approval-trend analytics, optional scheduled pulls.
 
 ## Conventions
 - Keep `Lead` shape consistent across adapters (see `sources/base.Lead`).
-- Don't put secrets in code or commit `.env`. Read keys from environment / encrypted source config.
-- After each working step: run `uvicorn backend.main:app --reload`, verify, then commit.
+- Don't put secrets in code or commit `.env`. Read keys from environment / encrypted source
+  config. `.env` and `joblead.db` exist only on the owner's machine — never assume they're
+  in the repo.
+- After each working step: run `python smoke_test.py`, then
+  `uvicorn backend.main:app --reload` to verify by hand, then commit.
 
-## Definition of done for v1
-The seven tabs in the prototype work against live data: profile (with LLM drafting),
-on-demand lead batches with scoring + approve/reject feedback, pipeline, add-a-job,
-data sources with connect/credentials + cost meter, dashboard summary, passcode gate, reset.
+## Definition of done for v1 (met)
+The seven tabs work against live data: profile (with LLM drafting), on-demand lead batches
+with scoring + approve/reject feedback, pipeline, add-a-job, data sources with
+connect/credentials + cost meter, dashboard summary, passcode gate, reset.
