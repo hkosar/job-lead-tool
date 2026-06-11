@@ -36,7 +36,7 @@ const SOURCES = [
 function srcMeta(key){ return SOURCES.find(S => S.key === key); }
 
 /* ---------- in-memory cache, hydrated from the server ---------- */
-let state = { candidate:{ profile:{}, intro:"" }, leads:[], sources:{} };
+let state = { candidate:{ profile:{}, intro:"" }, leads:[], sources:{}, currentBatch:0 };
 
 async function loadProfile(){ const d = await api("/api/profile"); state.candidate.profile = d.profile || {}; state.candidate.intro = d.intro || ""; }
 async function loadSources(){
@@ -44,7 +44,7 @@ async function loadSources(){
   (d.sources || []).forEach(s => { m[s.key] = { on:s.on, connected:s.connected, cred_hint:s.cred_hint, keyless:s.keyless }; });
   state.sources = m;
 }
-async function loadLeads(){ const d = await api("/api/leads"); state.leads = (d.leads || []).map(normLead); }
+async function loadLeads(){ const d = await api("/api/leads"); state.leads = (d.leads || []).map(normLead); state.currentBatch = d.current_batch || 0; }
 function normLead(l){ l.reason = (l.reasons && l.reasons.length) ? l.reasons.join(", ") : null; return l; }
 async function loadAll(){ await Promise.all([loadProfile(), loadSources(), loadLeads()]); renderAll(); }
 
@@ -180,21 +180,36 @@ async function buildBatch(){
   info.textContent="Searching your enabled sources…";
   try{
     const r=await api("/api/leads/refresh",{method:"POST"});
+    const b=await api("/api/leads/batch",{method:"POST",json:{n:quota()}});
     await loadLeads();
     renderQueue(); renderDash(); renderSources();
-    const shown=activeNewLeads().slice(0,quota()).length;
-    let msg=`Showing top ${shown} unreviewed leads by match score.`;
-    if(r.added) msg+=` (${r.added} new from this search.)`;
-    else if(r.found===0) msg+=` No new postings came back — connect/enable more sources, or add seed organizations in your profile.`;
-    if(r.errors && r.errors.length) msg+=` Some sources reported an error.`;
+    let msg;
+    if(!b.leads.length){
+      msg="No unreviewed leads available — connect/enable more sources, or add seed organizations in your profile.";
+    }else{
+      const repeats=b.leads.length-b.fresh;
+      msg=`Batch #${b.batch}: ${b.leads.length} leads by match score`;
+      msg+= repeats===0 ? ` — all new to you.` : ` — ${b.fresh} new to you, ${repeats} shown before (fresh ones are running low).`;
+      if(r.added) msg+=` (${r.added} just found.)`;
+    }
+    if(r.errors && r.errors.length) msg+=" Some sources reported an error.";
     info.textContent=msg;
   }catch(e){ info.textContent="Couldn't build a batch: "+e.message; }
 }
 function renderQueue(){
   const qEl=document.getElementById("quota"); if(qEl) qEl.value=quota();
-  const pool=activeNewLeads().sort((a,b)=>b.score-a.score).slice(0,quota());
+  // After the first batch is built, the queue shows the CURRENT batch only —
+  // rebuilding brings the next set instead of repeating what you ignored.
+  const pool = state.currentBatch>0
+    ? activeNewLeads().filter(l=>l.batchId===state.currentBatch).sort((a,b)=>b.score-a.score)
+    : activeNewLeads().sort((a,b)=>b.score-a.score).slice(0,quota());
   const el=document.getElementById("queue");
-  if(pool.length===0){ el.innerHTML='<div class="empty">No new leads from your enabled sources yet.<br>Press <b>Build batch</b> to search, enable more in <b>Data Sources</b>, or check the Pipeline tab.</div>'; return; }
+  if(pool.length===0){
+    el.innerHTML = (state.currentBatch>0 && activeNewLeads().length>0)
+      ? '<div class="empty">You\'ve worked through this batch ✓<br>Press <b>Build batch</b> for your next set of unreviewed leads.</div>'
+      : '<div class="empty">No new leads from your enabled sources yet.<br>Press <b>Build batch</b> to search, enable more in <b>Data Sources</b>, or check the Pipeline tab.</div>';
+    return;
+  }
   el.innerHTML=pool.map(leadCard).join("");
 }
 function leadCard(l){

@@ -46,6 +46,8 @@ class Lead(SQLModel, table=True):
     reasons_json: str = "[]"         # list of rejection reasons (multi-select + custom)
     added_manually: bool = False
     date_found: str = ""             # ISO timestamp when first stored
+    date_presented: str = ""         # ISO timestamp when last shown in a batch ("" = never)
+    batch_id: int = 0                # number of the last batch this lead appeared in (0 = none)
 
 def init_db():
     SQLModel.metadata.create_all(engine)
@@ -60,7 +62,8 @@ def _migrate_columns():
     if not DATABASE_URL.startswith("sqlite"):
         return
     from sqlalchemy import text
-    wanted = {"source": "TEXT DEFAULT ''", "date_found": "TEXT DEFAULT ''"}
+    wanted = {"source": "TEXT DEFAULT ''", "date_found": "TEXT DEFAULT ''",
+              "date_presented": "TEXT DEFAULT ''", "batch_id": "INTEGER DEFAULT 0"}
     with engine.connect() as conn:
         cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(lead)").fetchall()}
         for name, ddl in wanted.items():
